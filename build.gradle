@@ -17,24 +17,27 @@ plugins {
     id 'net.researchgate.release' version '2.5.0'
     id "com.github.johnrengelman.shadow" version "1.2.4"
 }
+
+// from release-files
+apply plugin: 'edu.sc.seis.launch4j'
+apply plugin: 'application'
+
 apply plugin: 'aversion-apt'
 apply plugin: 'aversion-util'
 apply plugin: 'idea'
 
+mainClassName = 'org.rivierarobotics.VisionClient'
+
 util {
     javaVersion = '1.8'
+    extraContainers.add('org.eclipse.fx.ide.jdt.core.JAVAFX_CONTAINER')
 }
 idea.project.languageLevel = util.javaVersion
 
-jar {
-    manifest {
-        attributes(
-            'Main-Class': 'org.rivierarobotics.VisionClient'
-        )
-    }
+eclipse.project {
+    natures 'org.eclipse.xtext.ui.shared.xtextNature'
+    buildCommand 'org.eclipse.xtext.ui.shared.xtextBuilder'
 }
-
-assemble.dependsOn(shadowJar)
 
 configurations.all {
     resolutionStrategy {
@@ -127,5 +130,18 @@ eclipse.classpath.file {
             .appendNode('attributes');
         attrNode.appendNode('attribute', ['name': 'ignore_optional_problems', 'value': 'true']);
         attrNode.appendNode('attribute', ['name': 'optional', 'value': 'true']);
-    }   
+    }
 }
+
+import java.util.jar.Attributes.Name
+
+jar {
+    manifest {
+        def map = new HashMap<String, String>()
+        map.put(Name.MAIN_CLASS.toString(), project.property('mainClassName') as String)
+        map.put(Name.IMPLEMENTATION_VERSION.toString(), project.version as String)
+        attributes.putAll(map)
+    }
+}
+
+apply plugin: me.kenzierocks.releasefiles.ReleaseFilesPlugin
