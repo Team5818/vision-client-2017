@@ -187,7 +187,7 @@ class ReleaseFilesPlugin implements Plugin<Project> {
                 GHRelease rel = repository
                         .createRelease(project.version as String)
                         .name("${project.name} ${project.version}")
-                        .body("Release of vision-client-2017, version ${project.version}")
+                        .body("Release of vision-client-2017, version ${project.version}.")
                         .draft(true) // draft it so I can write changelogs
                         .commitish(tipCommit.id)
                         .create()
