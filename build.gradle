@@ -57,6 +57,7 @@ ext.protobufVersion = '3.2.0'
 dependencies {
     compile group: 'org.slf4j', name: 'slf4j-api', version: '1.7.21'
     compile group: 'com.google.protobuf', name: 'protobuf-java', version: project.protobufVersion
+    compile group: 'org.jcodec', name: 'jcodec-javase', version: '0.1.9'
     compileOnly group: 'com.techshroom', name: 'jsr305-plus', version: '0.0.1'
 
     addAPTReqWComp group: 'com.google.guava', name: 'guava', version: '20.0'

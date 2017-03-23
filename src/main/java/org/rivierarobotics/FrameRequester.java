@@ -25,32 +25,24 @@
 package org.rivierarobotics;
 
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 
 import org.rivierarobotics.protos.Packet.Frame;
 import org.rivierarobotics.protos.Packet.SetFrameType;
 
+import com.google.common.collect.Sets;
+
 public class FrameRequester {
 
     private final NetworkManager network;
-    private volatile Consumer<Frame> frameCallback;
+    private final Set<Consumer<Frame>> frameCallback =
+            Sets.newConcurrentHashSet();
     private volatile Source source = Source.PLAIN;
     private volatile boolean sendSource = false;
 
     {
-        Thread thread = new Thread(() -> {
-            while (!Thread.interrupted()) {
-                try {
-                    frameRequestLoop();
-                    Thread.sleep(10);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        });
-        thread.setName("FrameRequest Loop");
-        thread.setDaemon(true);
-        thread.start();
+        new ThreadLoop("FrameRequester", this::frameRequestLoop, 10).start();
     }
 
     public FrameRequester(NetworkManager network) {
@@ -66,22 +58,19 @@ public class FrameRequester {
         return this.source;
     }
 
-    public void setFrameCallback(Consumer<Frame> frameCallback) {
-        this.frameCallback = frameCallback;
+    public void addFrameCallback(Consumer<Frame> frameCallback) {
+        this.frameCallback.add(frameCallback);
     }
 
     public void frameRequestLoop() {
         if (sendSource) {
             network.sendMessage(SetFrameType.newBuilder()
                     .setType(SetFrameType.Type.valueOf(source.name())).build());
-        }
-        if (frameCallback == null) {
-            // do nothing
-            return;
+            sendSource = false;
         }
         Optional<Frame> frame = network.nextMessageOfType(Frame.class);
         if (frame.isPresent()) {
-            frameCallback.accept(frame.get());
+            frameCallback.forEach(c -> c.accept(frame.get()));
         }
     }
 

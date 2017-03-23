@@ -31,15 +31,13 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.zip.InflaterInputStream;
 
 import org.rivierarobotics.protos.Packet.Frame;
 import org.rivierarobotics.protos.Packet.Signal;
 
-import com.google.protobuf.ByteString;
-
 import javafx.application.Platform;
 import javafx.fxml.FXML;
+import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
 import javafx.scene.image.Image;
@@ -52,12 +50,15 @@ public class VisionController {
             Paths.get(System.getProperty("user.home"), ".vision5818_address");
     private final NetworkManager network = new NetworkManager();
     private final FrameRequester requester = new FrameRequester(network);
+    private final FrameRecorder recorder = new FrameRecorder(requester);
     @FXML
     private ImageView imageView;
     @FXML
     private Label sourceText;
     @FXML
     private TextField address;
+    @FXML
+    private CheckBox recordCheckBox;
     private String originalSourceText;
 
     private void setSourceText(Source source) {
@@ -65,11 +66,8 @@ public class VisionController {
     }
 
     private void loadImage(Frame frame) {
-        ByteString bytes = frame.getJpeg();
-        try (InputStream in = bytes.newInput();
-                InflaterInputStream inflater = new InflaterInputStream(in)) {
-            // read jpeg from inflated stream
-            Image image = new Image(inflater, 0, 0, true, true);
+        try (InputStream in = FrameDecoder.getJpegStreamFromFrame(frame)) {
+            Image image = new Image(in, 0, 0, true, true);
             Platform.runLater(() -> {
                 imageView.setImage(image);
                 imageView.getParent().applyCss();
@@ -84,7 +82,7 @@ public class VisionController {
     public void initialize() {
         originalSourceText = sourceText.getText();
         setSourceText(requester.getSource());
-        requester.setFrameCallback(this::loadImage);
+        requester.addFrameCallback(this::loadImage);
         try {
             if (Files.exists(ADDRESS_FILE)) {
                 String s = StandardCharsets.UTF_8
@@ -134,6 +132,18 @@ public class VisionController {
     public void switchFeed() {
         network.sendMessage(
                 Signal.newBuilder().setType(Signal.Type.SWITCH_FEED).build());
+    }
+
+    @FXML
+    public void switchRecording() {
+        boolean rec = recordCheckBox.isSelected();
+        if (rec) {
+            recorder.startRecording();
+        } else {
+            recorder.stopRecording();
+        }
+        // update checkbox in case we didn't start recording
+        recordCheckBox.setSelected(recorder.isRecording());
     }
 
     @FXML

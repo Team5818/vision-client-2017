@@ -62,19 +62,7 @@ public class NetworkManager {
     private long reconnectNanos;
 
     {
-        Thread thread = new Thread(() -> {
-            while (!Thread.interrupted()) {
-                try {
-                    networkLoop();
-                    Thread.sleep(10);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
-            }
-        });
-        thread.setName("NetworkManager Processing");
-        thread.setDaemon(true);
-        thread.start();
+        new ThreadLoop("NetworkManager", this::networkLoop, 10).start();
     }
 
     public void setAddr(String addr) {
