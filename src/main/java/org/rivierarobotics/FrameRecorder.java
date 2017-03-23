@@ -31,6 +31,7 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Deque;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -54,6 +55,7 @@ public class FrameRecorder {
             e.printStackTrace();
         }
     }
+    private static final DateTimeFormatter FILE_NAME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd+HH.mm.ss");
 
     private final FrameRequester requester;
     private final Lock changeLock = new ReentrantLock();
@@ -75,7 +77,7 @@ public class FrameRecorder {
         try {
             try {
                 enc = new SequenceEncoder(
-                        new File(REC_PATH, LocalDateTime.now() + ".mp4"));
+                        new File(REC_PATH, LocalDateTime.now().format(FILE_NAME_FORMAT) + ".mp4"));
             } catch (IOException e) {
                 e.printStackTrace();
                 return;
