@@ -29,6 +29,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.Deque;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -47,7 +48,11 @@ public class FrameRecorder {
 
     private static final File REC_PATH = new File("vc2017-recorded");
     static {
-        REC_PATH.mkdir();
+        try {
+            Files.createDirectories(REC_PATH.toPath());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     private final FrameRequester requester;
