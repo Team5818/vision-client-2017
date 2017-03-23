@@ -188,6 +188,10 @@ public class NetworkManager {
             anyRead = true;
             inPacketLock.lock();
             try {
+                // toss packets!
+                while (!incomingPackets.isEmpty()) {
+                    incomingPackets.removeFirst();
+                }
                 incomingPackets.addLast(Packets.readPacket(in));
             } finally {
                 inPacketLock.unlock();
