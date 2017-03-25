@@ -235,6 +235,7 @@ public class NetworkManager {
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
+            idleSet = false;
             connection = null;
             reconnectNanos = System.nanoTime()
                     + TimeUnit.MILLISECONDS.toNanos(RECONNECT_TIMEOUT);
