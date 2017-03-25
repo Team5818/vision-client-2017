@@ -24,10 +24,13 @@
  */
 package org.rivierarobotics;
 
+import java.io.InputStream;
+
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
+import javafx.scene.image.Image;
 import javafx.stage.Stage;
 
 public class VisionClient extends Application {
@@ -42,6 +45,10 @@ public class VisionClient extends Application {
         loader.setController(new VisionController());
         Parent parent = loader.load();
         primaryStage.setScene(new Scene(parent));
+        try (InputStream is = getClass().getResourceAsStream("icon.png")) {
+            Image img = new Image(is);
+            primaryStage.getIcons().add(img);
+        }
         primaryStage.show();
         primaryStage.setMaximized(true);
         primaryStage.centerOnScreen();
