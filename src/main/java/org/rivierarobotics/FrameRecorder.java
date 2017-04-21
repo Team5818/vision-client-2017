@@ -31,20 +31,27 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Deque;
+import java.util.Iterator;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import javax.imageio.ImageIO;
 
-import org.jcodec.api.SequenceEncoder;
-import org.jcodec.common.model.Picture;
-import org.jcodec.scale.AWTUtil;
 import org.rivierarobotics.protos.Packet.Frame;
 
 public class FrameRecorder {
@@ -64,7 +71,8 @@ public class FrameRecorder {
     private final Lock changeLock = new ReentrantLock();
     private final Deque<Frame> pendingFrames = new ConcurrentLinkedDeque<>();
     private final AtomicBoolean closeRequested = new AtomicBoolean();
-    private volatile SequenceEncoder enc;
+    private final AtomicReference<Path> encodeDir = new AtomicReference<>(null);
+    private final AtomicInteger frameCounter = new AtomicInteger(0);
 
     {
         new ThreadLoop("FrameRecorder", this::encodingLoop, 10).start();
@@ -78,9 +86,15 @@ public class FrameRecorder {
     public void startRecording() {
         changeLock.lock();
         try {
+            if (encodeDir.get() != null) {
+                return;
+            }
             try {
-                enc = new SequenceEncoder(new File(REC_PATH,
-                        LocalDateTime.now().format(FILE_NAME_FORMAT) + ".mp4"));
+                Path path = REC_PATH.toPath().resolve(
+                        LocalDateTime.now().format(FILE_NAME_FORMAT));
+                Files.createDirectory(path);
+                encodeDir.set(path);
+                frameCounter.set(0);
             } catch (IOException e) {
                 e.printStackTrace();
                 return;
@@ -101,7 +115,7 @@ public class FrameRecorder {
 
     public boolean isRecording() {
         // not recording if close requested
-        return !closeRequested.get() && enc != null;
+        return !closeRequested.get() && encodeDir.get() != null;
     }
 
     private void addFrame(Frame frame) {
@@ -114,7 +128,7 @@ public class FrameRecorder {
     private void encodingLoop() throws Exception {
         changeLock.lock();
         try {
-            if (enc != null && !pendingFrames.isEmpty()) {
+            if (encodeDir.get() != null && !pendingFrames.isEmpty()) {
                 doEncode();
             }
             if (closeRequested.get()) {
@@ -122,9 +136,9 @@ public class FrameRecorder {
                     doEncode();
                 }
                 try {
-                    enc.finish();
+                    zipEncode();
                 } finally {
-                    enc = null;
+                    encodeDir.set(null);
                     closeRequested.set(false);
                 }
             }
@@ -133,19 +147,52 @@ public class FrameRecorder {
         }
     }
 
-    private void doEncode() throws IOException {
-        checkState(!pendingFrames.isEmpty(), "no frame to encode");
-        enc.encodeNativeFrame(decodeFrame(pendingFrames.removeFirst()));
+    private void zipEncode() throws IOException {
+        Path e = encodeDir.get();
+        Path zip = e.resolveSibling(e.getFileName() + ".zip");
+        try (ZipOutputStream out =
+                new ZipOutputStream(Files.newOutputStream(zip));
+                Stream<Path> paths = Files.list(e)) {
+            for (Iterator<Path> iter = paths.iterator(); iter.hasNext();) {
+                Path next = iter.next();
+                out.putNextEntry(new ZipEntry(next.getFileName().toString()));
+                out.write(Files.readAllBytes(next));
+                out.closeEntry();
+            }
+        }
+        // if totally successful, clear dir
+        Files.walkFileTree(e, new SimpleFileVisitor<Path>() {
+
+            @Override
+            public FileVisitResult visitFile(Path file,
+                    BasicFileAttributes attrs) throws IOException {
+                Files.deleteIfExists(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path dir, IOException exc)
+                    throws IOException {
+                Files.deleteIfExists(dir);
+                return super.postVisitDirectory(dir, exc);
+            }
+        });
     }
 
-    private Picture decodeFrame(Frame frame) {
-        BufferedImage img;
+    private void doEncode() throws IOException {
+        checkState(!pendingFrames.isEmpty(), "no frame to encode");
+        Path frameFile = encodeDir.get()
+                .resolve("frame" + frameCounter.getAndIncrement() + ".png");
+        ImageIO.write(decodeFrame(pendingFrames.removeFirst()), "PNG",
+                frameFile.toFile());
+    }
+
+    private BufferedImage decodeFrame(Frame frame) {
         try (InputStream is = FrameDecoder.getJpegStreamFromFrame(frame)) {
-            img = ImageIO.read(is);
+            return ImageIO.read(is);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }
-        return AWTUtil.fromBufferedImage(img);
     }
 
 }
