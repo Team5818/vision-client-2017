@@ -12,7 +12,7 @@ buildscript {
     }
 }
 plugins {
-	id "com.google.protobuf" version "0.8.1"
+    id "com.google.protobuf" version "0.8.1"
     id "com.github.hierynomus.license" version "0.13.1"
     id 'net.researchgate.release' version '2.5.0'
     id "com.github.johnrengelman.shadow" version "1.2.4"
