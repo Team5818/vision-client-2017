@@ -24,6 +24,11 @@
  */
 package org.rivierarobotics;
 
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -31,6 +36,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+
+import javax.imageio.ImageIO;
 
 import org.rivierarobotics.protos.Packet.Frame;
 import org.rivierarobotics.protos.Packet.Signal;
@@ -59,6 +66,8 @@ public class VisionController {
     private TextField address;
     @FXML
     private CheckBox recordCheckBox;
+    @FXML
+    private CheckBox crossCheckBox;
     private String originalSourceText;
 
     private void setSourceText(Source source) {
@@ -67,7 +76,21 @@ public class VisionController {
 
     private void loadImage(Frame frame) {
         try (InputStream in = FrameDecoder.getJpegStreamFromFrame(frame)) {
-            Image image = new Image(in, 0, 0, true, true);
+            InputStream finalStream = in;
+            if (crossCheckBox.isSelected()) {
+                // Load via AWT to draw with graphics
+                BufferedImage image = ImageIO.read(in);
+                Graphics2D g = image.createGraphics();
+                g.setColor(Color.CYAN);
+                int w = image.getWidth();
+                int h = image.getHeight();
+                g.drawLine(w / 2, 0, w / 2, h);
+                g.drawLine(0, h / 2, w, h / 2);
+                ByteArrayOutputStream cap = new ByteArrayOutputStream();
+                ImageIO.write(image, "PNG", cap);
+                finalStream = new ByteArrayInputStream(cap.toByteArray());
+            }
+            Image image = new Image(finalStream, 0, 0, true, true);
             Platform.runLater(() -> {
                 imageView.setImage(image);
                 imageView.getParent().applyCss();
@@ -120,6 +143,10 @@ public class VisionController {
         } else {
             address.setText(s);
         }
+    }
+
+    public Source getSource() {
+        return requester.getSource();
     }
 
     @FXML

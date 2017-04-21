@@ -24,6 +24,8 @@
  */
 package org.rivierarobotics;
 
+import static com.google.common.base.Preconditions.checkState;
+
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -55,7 +57,8 @@ public class FrameRecorder {
             e.printStackTrace();
         }
     }
-    private static final DateTimeFormatter FILE_NAME_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd+HH.mm.ss");
+    private static final DateTimeFormatter FILE_NAME_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd+HH.mm.ss");
 
     private final FrameRequester requester;
     private final Lock changeLock = new ReentrantLock();
@@ -76,8 +79,8 @@ public class FrameRecorder {
         changeLock.lock();
         try {
             try {
-                enc = new SequenceEncoder(
-                        new File(REC_PATH, LocalDateTime.now().format(FILE_NAME_FORMAT) + ".mp4"));
+                enc = new SequenceEncoder(new File(REC_PATH,
+                        LocalDateTime.now().format(FILE_NAME_FORMAT) + ".mp4"));
             } catch (IOException e) {
                 e.printStackTrace();
                 return;
@@ -112,9 +115,12 @@ public class FrameRecorder {
         changeLock.lock();
         try {
             if (enc != null && !pendingFrames.isEmpty()) {
-                enc.encodeNativeFrame(decodeFrame(pendingFrames.removeFirst()));
+                doEncode();
             }
-            if (pendingFrames.isEmpty() && closeRequested.get()) {
+            if (closeRequested.get()) {
+                while (!pendingFrames.isEmpty()) {
+                    doEncode();
+                }
                 try {
                     enc.finish();
                 } finally {
@@ -125,6 +131,11 @@ public class FrameRecorder {
         } finally {
             changeLock.unlock();
         }
+    }
+
+    private void doEncode() throws IOException {
+        checkState(!pendingFrames.isEmpty(), "no frame to encode");
+        enc.encodeNativeFrame(decodeFrame(pendingFrames.removeFirst()));
     }
 
     private Picture decodeFrame(Frame frame) {

@@ -7,3 +7,4 @@ build/
 !/gradle/wrapper/gradle-wrapper.jar
 /.apt_generated/
 vc2017-recorded/
+/bin/
