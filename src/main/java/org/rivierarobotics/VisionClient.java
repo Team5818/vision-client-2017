@@ -26,6 +26,8 @@ package org.rivierarobotics;
 
 import java.io.InputStream;
 
+import org.slf4j.Logger;
+
 import javafx.application.Application;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Parent;
@@ -34,8 +36,11 @@ import javafx.scene.image.Image;
 import javafx.stage.Stage;
 
 public class VisionClient extends Application {
+    
+    private static final Logger LOGGER = LoggerUtil.callingClassLogger();
 
     public static void main(String[] args) {
+        LOGGER.info("Starting VisionClient...");
         Application.launch(args);
     }
 
@@ -52,6 +57,7 @@ public class VisionClient extends Application {
         primaryStage.show();
         primaryStage.setMaximized(true);
         primaryStage.centerOnScreen();
+        LOGGER.info("VisionClient started!");
     }
 
 }

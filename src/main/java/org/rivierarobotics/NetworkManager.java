@@ -38,12 +38,15 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.rivierarobotics.packet.Packets;
+import org.slf4j.Logger;
 
 import com.google.protobuf.Any;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.Message;
 
 public class NetworkManager {
+
+    private static final Logger LOGGER = LoggerUtil.callingClassLogger();
 
     private static final int RECONNECT_TIMEOUT = 500;
     private static final int IDLE_TIMEOUT = 500;
@@ -74,7 +77,7 @@ public class NetworkManager {
                 connection.close();
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            LOGGER.warn("Error closing socket", e);
         }
     }
 
@@ -87,7 +90,7 @@ public class NetworkManager {
                 connection.close();
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            LOGGER.warn("Error closing socket", e);
         }
     }
 
@@ -163,8 +166,7 @@ public class NetworkManager {
             // stall thread until ready, to prevent grinding CPU
             try {
                 long totalNanos = reconnectNanos - System.nanoTime();
-                long millis = TimeUnit.NANOSECONDS
-                        .toMillis(totalNanos);
+                long millis = TimeUnit.NANOSECONDS.toMillis(totalNanos);
                 int extraNanos = (int) (totalNanos
                         - TimeUnit.MILLISECONDS.toNanos(millis));
                 Thread.sleep(millis, extraNanos);
@@ -176,7 +178,9 @@ public class NetworkManager {
         try {
             connection = new Socket(addr, port);
             connection.setSoTimeout(500);
-        } finally {
+        } catch (IOException e) {
+            // ignore it
+        }finally {
             connLock.unlock();
         }
     }
@@ -200,7 +204,7 @@ public class NetworkManager {
         if (!anyRead) {
             if (idleSet && idleNanos < System.nanoTime()) {
                 // expire socket
-                System.err.println("Disconnecting due to idle timeout");
+                LOGGER.info("Disconnecting due to idle timeout");
                 disconnect();
             }
         } else {
@@ -233,7 +237,7 @@ public class NetworkManager {
                 connection.close();
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            // LOGGER.warn("Error closing connection", e);
         } finally {
             idleSet = false;
             connection = null;

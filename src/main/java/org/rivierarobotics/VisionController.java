@@ -41,8 +41,15 @@ import javax.imageio.ImageIO;
 
 import org.rivierarobotics.protos.Packet.Frame;
 import org.rivierarobotics.protos.Packet.Signal;
+import org.slf4j.Logger;
+
+import com.sun.javafx.binding.StringFormatter;
 
 import javafx.application.Platform;
+import javafx.beans.binding.Bindings;
+import javafx.beans.property.ReadOnlyIntegerProperty;
+import javafx.beans.value.ObservableValue;
+import javafx.beans.value.ObservableValueBase;
 import javafx.fxml.FXML;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
@@ -52,6 +59,8 @@ import javafx.scene.image.ImageView;
 import javafx.scene.layout.Pane;
 
 public class VisionController {
+
+    private static final Logger LOGGER = LoggerUtil.callingClassLogger();
 
     private static final Path ADDRESS_FILE =
             Paths.get(System.getProperty("user.home"), ".vision5818_address");
@@ -68,6 +77,8 @@ public class VisionController {
     private CheckBox recordCheckBox;
     @FXML
     private CheckBox crossCheckBox;
+    @FXML
+    private Label statusLabel;
     private String originalSourceText;
 
     private void setSourceText(Source source) {
@@ -97,7 +108,7 @@ public class VisionController {
                 imageView.getParent().layout();
             });
         } catch (IOException e) {
-            e.printStackTrace();
+            LOGGER.warn("Failed to load image from frame", e);
         }
     }
 
@@ -115,8 +126,12 @@ public class VisionController {
                 setAddress(s, false);
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            LOGGER.warn("Failed to read address file", e);
         }
+
+        // set status to "Frames behind: " + n
+        statusLabel.textProperty().bind(Bindings.format("Frames behind: %d",
+                recorder.behindFramesCountProperty()));
 
         // resize image view to fit parent
         imageView.fitHeightProperty()
@@ -138,7 +153,7 @@ public class VisionController {
             try {
                 Files.write(ADDRESS_FILE, s.getBytes(StandardCharsets.UTF_8));
             } catch (IOException e) {
-                e.printStackTrace();
+                LOGGER.warn("Failed to write address file");
             }
         } else {
             address.setText(s);

@@ -30,6 +30,7 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -53,15 +54,23 @@ import java.util.zip.ZipOutputStream;
 import javax.imageio.ImageIO;
 
 import org.rivierarobotics.protos.Packet.Frame;
+import org.slf4j.Logger;
+
+import com.google.common.io.ByteStreams;
+
+import javafx.beans.property.ReadOnlyIntegerProperty;
+import javafx.beans.property.ReadOnlyIntegerPropertyBase;
 
 public class FrameRecorder {
+
+    private static final Logger LOGGER = LoggerUtil.callingClassLogger();
 
     private static final File REC_PATH = new File("vc2017-recorded");
     static {
         try {
             Files.createDirectories(REC_PATH.toPath());
         } catch (IOException e) {
-            e.printStackTrace();
+            LOGGER.warn("Error creating REC_PATH", e);
         }
     }
     private static final DateTimeFormatter FILE_NAME_FORMAT =
@@ -71,8 +80,42 @@ public class FrameRecorder {
     private final Lock changeLock = new ReentrantLock();
     private final Deque<Frame> pendingFrames = new ConcurrentLinkedDeque<>();
     private final AtomicBoolean closeRequested = new AtomicBoolean();
-    private final AtomicReference<Path> encodeDir = new AtomicReference<>(null);
+    private final AtomicReference<OutputStream> encodeStream =
+            new AtomicReference<>(null);
+    private final AtomicReference<Path> encodeFile =
+            new AtomicReference<>(null);
     private final AtomicInteger frameCounter = new AtomicInteger(0);
+    private final BFCProperty behindFramesCountProperty =
+            new BFCProperty(this);
+
+    private static final class BFCProperty extends ReadOnlyIntegerPropertyBase {
+
+        private final FrameRecorder $this;
+
+        private BFCProperty(FrameRecorder $this) {
+            this.$this = $this;
+        }
+
+        @Override
+        public int get() {
+            return $this.pendingFrames.size();
+        }
+
+        @Override
+        public String getName() {
+            return "behindFramesCount";
+        }
+
+        @Override
+        public Object getBean() {
+            return $this;
+        }
+
+        @Override
+        public void fireValueChangedEvent() {
+            super.fireValueChangedEvent();
+        }
+    }
 
     {
         new ThreadLoop("FrameRecorder", this::encodingLoop, 10).start();
@@ -86,19 +129,20 @@ public class FrameRecorder {
     public void startRecording() {
         changeLock.lock();
         try {
-            if (encodeDir.get() != null) {
+            if (encodeFile.get() != null || closeRequested.get()) {
                 return;
             }
             try {
-                Path path = REC_PATH.toPath().resolve(
-                        LocalDateTime.now().format(FILE_NAME_FORMAT));
-                Files.createDirectory(path);
-                encodeDir.set(path);
+                Path path = REC_PATH.toPath()
+                        .resolve(LocalDateTime.now().format(FILE_NAME_FORMAT));
+                encodeStream.set(Files.newOutputStream(path));
+                encodeFile.set(path);
                 frameCounter.set(0);
-            } catch (IOException e) {
-                e.printStackTrace();
+            } catch (Exception e) {
+                LOGGER.warn("Error creating target recording directory", e);
                 return;
             }
+            LOGGER.info("Recorder started (file: " + encodeFile.get() + ")!");
         } finally {
             changeLock.unlock();
         }
@@ -108,6 +152,7 @@ public class FrameRecorder {
         changeLock.lock();
         try {
             closeRequested.set(true);
+            LOGGER.info("Stop requested");
         } finally {
             changeLock.unlock();
         }
@@ -115,7 +160,11 @@ public class FrameRecorder {
 
     public boolean isRecording() {
         // not recording if close requested
-        return !closeRequested.get() && encodeDir.get() != null;
+        return !closeRequested.get() && encodeFile.get() != null;
+    }
+
+    public ReadOnlyIntegerProperty behindFramesCountProperty() {
+        return behindFramesCountProperty;
     }
 
     private void addFrame(Frame frame) {
@@ -123,22 +172,32 @@ public class FrameRecorder {
             return;
         }
         pendingFrames.addLast(frame);
+        behindFramesCountProperty.fireValueChangedEvent();
     }
 
     private void encodingLoop() throws Exception {
         changeLock.lock();
         try {
-            if (encodeDir.get() != null && !pendingFrames.isEmpty()) {
+            if (encodeFile.get() != null && !pendingFrames.isEmpty()) {
                 doEncode();
             }
             if (closeRequested.get()) {
+                LOGGER.info("Stopping recording of " + encodeFile.get());
+                LOGGER.info("Flushing frames (count: " + pendingFrames.size()
+                        + ")");
                 while (!pendingFrames.isEmpty()) {
                     doEncode();
                 }
-                try {
-                    zipEncode();
+                LOGGER.info("Flushed all frames, zipping");
+                // set stream so it closes in finally
+                try (OutputStream stream = encodeStream.get()) {
+                    // zipEncode();
+                } catch (Exception e) {
+                    LOGGER.warn("Error zip-encoding", e);
                 } finally {
-                    encodeDir.set(null);
+                    LOGGER.info("Finalized recording of " + encodeFile.get());
+                    encodeStream.set(null);
+                    encodeFile.set(null);
                     closeRequested.set(false);
                 }
             }
@@ -148,7 +207,7 @@ public class FrameRecorder {
     }
 
     private void zipEncode() throws IOException {
-        Path e = encodeDir.get();
+        Path e = encodeFile.get();
         Path zip = e.resolveSibling(e.getFileName() + ".zip");
         try (ZipOutputStream out =
                 new ZipOutputStream(Files.newOutputStream(zip));
@@ -181,10 +240,14 @@ public class FrameRecorder {
 
     private void doEncode() throws IOException {
         checkState(!pendingFrames.isEmpty(), "no frame to encode");
-        Path frameFile = encodeDir.get()
-                .resolve("frame" + frameCounter.getAndIncrement() + ".png");
-        ImageIO.write(decodeFrame(pendingFrames.removeFirst()), "PNG",
-                frameFile.toFile());
+        try (InputStream stream = FrameDecoder
+                .getJpegStreamFromFrame(pendingFrames.removeFirst())) {
+            OutputStream out = encodeStream.get();
+            ByteStreams.copy(stream, out);
+            out.flush();
+        } finally {
+            behindFramesCountProperty.fireValueChangedEvent();
+        }
     }
 
     private BufferedImage decodeFrame(Frame frame) {

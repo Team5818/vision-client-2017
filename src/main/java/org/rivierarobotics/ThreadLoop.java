@@ -24,6 +24,9 @@
  */
 package org.rivierarobotics;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class ThreadLoop {
 
     @FunctionalInterface
@@ -33,6 +36,7 @@ public class ThreadLoop {
 
     }
 
+    private final Logger logger;
     private final String name;
     private final RunnableEx loop;
     private final long millisPeriod;
@@ -41,6 +45,7 @@ public class ThreadLoop {
         this.name = name;
         this.loop = loop;
         this.millisPeriod = millisPeriod;
+        this.logger = LoggerFactory.getLogger(name);
     }
 
     public Thread start() {
@@ -50,7 +55,7 @@ public class ThreadLoop {
                     loop.run();
                     Thread.sleep(millisPeriod);
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    logger.warn("Error from loop", e);
                 }
             }
         });
